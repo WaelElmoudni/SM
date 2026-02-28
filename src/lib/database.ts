@@ -3,6 +3,7 @@ import path from 'path'
 import initSqlJs from 'sql.js'
 
 const dbPath = path.join(process.cwd(), 'students.db')
+const isProduction = process.env.NODE_ENV === 'production'
 
 let db: any = null
 let SQL: any = null
@@ -19,9 +20,16 @@ async function getDb() {
     const SQL = await initSQL()
 
     try {
-      if (fs.existsSync(dbPath)) {
-        const filebuffer = fs.readFileSync(dbPath)
-        db = new SQL.Database(filebuffer)
+      // Try to load from file, but fallback to in-memory if it fails
+      if (!isProduction && fs.existsSync(dbPath)) {
+        try {
+          const filebuffer = fs.readFileSync(dbPath)
+          db = new SQL.Database(filebuffer)
+        } catch (readError) {
+          console.warn('Failed to read database file, creating new in-memory database:', readError)
+          db = new SQL.Database()
+          initializeDb()
+        }
       } else {
         db = new SQL.Database()
         initializeDb()
@@ -36,13 +44,13 @@ async function getDb() {
 }
 
 function saveDb() {
-  if (db) {
+  if (db && !isProduction) {
     try {
       const data = db.export()
       const buffer = Buffer.from(data)
       fs.writeFileSync(dbPath, buffer)
     } catch (error) {
-      console.error('Error saving database:', error)
+      console.warn('Error saving database (this is expected on Vercel):', error)
     }
   }
 }
